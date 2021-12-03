@@ -14,8 +14,6 @@ mapBinaryCharLine (x:xs) = (read [x] :: Int) * (2 ^ length xs) + mapBinaryCharLi
 numOneNthBits :: [Int] -> Int -> Int
 numOneNthBits xs index = foldr
   (\ x -> (+) (boolToInt (testBit x index))) 0 xs
--- numOneNthBits [] index = 0
--- numOneNthBits (x:xs) index = boolToInt (testBit x index) + numOneNthBits xs index
 
 one = 1
 zero = 0
@@ -60,6 +58,29 @@ constructNthBitValue getNthBit values numBits = constructNthBitLoop getNthBit va
 constructMostCommon = constructNthBitValue mostCommonNthBit
 constructLeastCommon = constructNthBitValue leastCommonNthBit
 
+filterByNthBit :: [Int] -> Int -> Int -> [Int]
+filterByNthBit [] index nthBit = []
+filterByNthBit (x:xs) index nthBit
+  | boolToInt (testBit x index) == nthBit = x : filterByNthBit xs index nthBit
+  | otherwise = filterByNthBit xs index nthBit
+
+negateBin :: Int -> Int
+negateBin 0 = 1
+negateBin 1 = 0
+
+filterByNthBitValue :: ([Int] -> Int -> Int) -> Int -> [Int] -> Int -> [Int]
+filterByNthBitValue getNthBit testedValue values index
+  | getNthBit values index == testedValue = filterByNthBit values index testedValue
+  | otherwise = filterByNthBit values index (negateBin testedValue)
+
+eliminateByNthBitValue :: ([Int] -> Int -> Int) -> Int -> [Int] -> Int -> Int
+eliminateByNthBitValue getNthBit testedValue values numBits
+  | length values == 1 = head values
+  | otherwise = eliminateByNthBitValue getNthBit testedValue (filterByNthBitValue getNthBit testedValue values (numBits - 1)) (numBits - 1)
+
+eliminateByMostCommon = eliminateByNthBitValue mostCommonNthBit 0
+eliminateByLeastCommon = eliminateByNthBitValue leastCommonNthBit 1
+
 task1 :: [Int] -> Int -> IO ()
 task1 values numBits = do
   let gamma = constructMostCommon values numBits
@@ -69,6 +90,15 @@ task1 values numBits = do
 
   printf "Task 1: gamma=%d, epsilon=%d, powerConsumption=%d\n" gamma epsilon powerConsumption
 
+task2 :: [Int] -> Int -> IO ()
+task2 values numBits = do
+  let oxygenGeneratorRating = eliminateByMostCommon values numBits
+  let co2ScrubberRating = eliminateByLeastCommon values numBits
+
+  let lifeSupportRating = oxygenGeneratorRating * co2ScrubberRating
+
+  printf "Task 2: oxygenGeneratorRating=%d, co2ScrubberRating=%d, lifeSupportRating=%d\n" oxygenGeneratorRating co2ScrubberRating lifeSupportRating
+
 main = do
   content <- readFile inputFile
   let chars = lines content
@@ -76,3 +106,4 @@ main = do
   let values = map mapBinaryCharLine chars
 
   task1 values numBits
+  task2 values numBits
