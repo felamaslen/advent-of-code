@@ -25,7 +25,7 @@ getBoards chars
   | otherwise = getBoardDefinition (take 5 chars) : getBoards (drop 5 chars)
 
 isRowMarked :: [(Int, Bool)] -> Bool
-isRowMarked = foldr ((&&) . snd) False
+isRowMarked = foldr ((&&) . snd) True
 
 isColumnMarkedLoop :: Board -> Int -> Int -> Bool
 isColumnMarkedLoop board col row
@@ -60,6 +60,20 @@ getWonBoard boards
   | hasIndividualBoardWon (head boards) = head boards
   | otherwise = getWonBoard (drop 1 boards)
 
+deleteAtIndex :: [t] -> Int -> [t]
+deleteAtIndex [] index = []
+deleteAtIndex items index = take index items ++ drop (index + 1) items
+
+excludeWonBoardsLoop :: [Board] -> Int -> [Board]
+excludeWonBoardsLoop boards index
+  | null boards = boards
+  | index >= length boards = boards
+  | hasIndividualBoardWon (boards !! index) = excludeWonBoardsLoop (deleteAtIndex boards index) index
+  | otherwise = excludeWonBoardsLoop boards (index + 1)
+
+excludeWonBoards :: [Board] -> [Board]
+excludeWonBoards boards = excludeWonBoardsLoop boards 0
+
 playMoveOnCell :: Int -> (Int, Bool) -> (Int, Bool)
 playMoveOnCell move cell
   | fst cell == move = (fst cell, True)
@@ -92,6 +106,24 @@ sumUnmarkedRow = foldr ((+) . sumUnmarkedCell) 0
 sumUnmarked :: Board -> Int
 sumUnmarked = foldr ((+) . sumUnmarkedRow) 0
 
+addScore :: Board -> Int -> (Board, Int)
+addScore wonBoard winningMove = (wonBoard, winningMove * sumUnmarked wonBoard)
+
+getLastBoardOrderedByWinningWithScoreLoop :: [Int] -> [Board] -> (Board, Int) -> (Board, Int)
+getLastBoardOrderedByWinningWithScoreLoop order boards (winningBoard, winningScore)
+  | null boards || null order = (winningBoard, winningScore)
+  | hasBoardWon (playMove order boards) = getLastBoardOrderedByWinningWithScoreLoop
+    (drop 1 order)
+    (excludeWonBoards (playMove order boards))
+    (addScore (getWonBoard (playMove order boards)) (head order))
+  | otherwise = getLastBoardOrderedByWinningWithScoreLoop
+    (drop 1 order)
+    (playMove order boards)
+    (winningBoard, winningScore)
+
+getLastBoardOrderedByWinningWithScore :: [Int] -> [Board] -> (Board, Int)
+getLastBoardOrderedByWinningWithScore order boards = getLastBoardOrderedByWinningWithScoreLoop order boards ([], 0)
+
 task1 :: [Int] -> [Board] -> IO ()
 task1 order boards = do
   let (winningBoard, winningMove) = getWinningBoardAndMove order boards
@@ -101,6 +133,12 @@ task1 order boards = do
 
   printf "Task 1: winningMove=%d, unmarkedValue=%d, finalScore=%d\n" winningMove unmarkedValue finalScore
 
+task2 :: [Int] -> [Board] -> IO ()
+task2 order boards = do
+  let (winningBoard, winningScore) = getLastBoardOrderedByWinningWithScore order boards
+
+  printf "Task 2: winningScore=%d\n" winningScore
+
 main = do
   content <- readFile inputFile
   let chars = lines content
@@ -109,3 +147,4 @@ main = do
   let boards = getBoards (drop 1 chars)
 
   task1 order boards
+  task2 order boards
