@@ -38,6 +38,18 @@ filterStraightLines (x:xs)
   | isLineStraight x = x : filterStraightLines xs
   | otherwise = filterStraightLines xs
 
+isLineDiagonal :: Line -> Bool
+isLineDiagonal ((x1,y1), (x2,y2)) = abs (x1 - x2) == abs (y1 - y2)
+
+filterDiagonalLines :: [Line] -> [Line]
+filterDiagonalLines [] = []
+filterDiagonalLines (x:xs)
+  | isLineDiagonal x = x : filterDiagonalLines xs
+  | otherwise = filterDiagonalLines xs
+
+filterStraightAndDiagonalLines :: [Line] -> [Line]
+filterStraightAndDiagonalLines allLines = filterStraightLines allLines ++ filterDiagonalLines allLines
+
 getVerticalLinePoints :: Int -> Int -> Int -> [(Int, Int)]
 getVerticalLinePoints x y1 y2
   | y1 > y2 = []
@@ -50,71 +62,89 @@ getHorizontalLinePoints y x1 x2
   | x1 == x2 = [(x1, y)]
   | otherwise = (x1, y) : getHorizontalLinePoints y (x1 + 1) x2
 
-getPoints :: Line -> [(Int, Int)]
-getPoints ((x1,y1), (x2,y2))
-  | x1 == x2 = getVerticalLinePoints x1 (min y1 y2) (max y1 y2)
-  | y1 == y2 = getHorizontalLinePoints y1 (min x1 x2) (max x1 x2)
-  | otherwise = error "getPoints called with non-horizontal line"
+diagDiff :: Int -> Int -> Int
+diagDiff start end
+  | start < end = 1
+  | otherwise = -1
 
-getCollisionsBetweenVerticalLines :: Line -> Line -> [(Int, Int)]
-getCollisionsBetweenVerticalLines ((ax1, ay1), (ax2, ay2)) ((bx1, by1), (bx2, by2))
-  | ax1 == bx1 = getVerticalLinePoints
-    ax1
-    (max (min ay1 ay2) (min by1 by2))
-    (min (max ay1 ay2) (max by1 by2))
-  | otherwise = []
+getDiagonalLinePointsLoop :: Int -> Int -> Int -> Int -> Int -> Int -> [(Int, Int)]
+getDiagonalLinePointsLoop sx sy ex ey dx dy
+  | sx == ex || sy == ey = [(sx, sy)]
+  | otherwise = (sx,sy) : getDiagonalLinePointsLoop (sx + dx) (sy + dy) ex ey dx dy
 
-getCollisionsBetweenHorizontalLines :: Line -> Line -> [(Int, Int)]
-getCollisionsBetweenHorizontalLines ((ax1, ay1), (ax2, ay2)) ((bx1, by1), (bx2, by2))
-  | ay1 == by1 = getHorizontalLinePoints
-    ay1
-    (max (min ax1 ax2) (min bx1 bx2))
-    (min (max ax1 ax2) (max bx1 bx2))
-  | otherwise = []
+getDiagonalLinePoints :: Int -> Int -> Int -> Int -> [(Int, Int)]
+getDiagonalLinePoints sx sy ex ey = getDiagonalLinePointsLoop sx sy ex ey
+  (diagDiff sx ex) (diagDiff sy ey)
 
--- First line is vertical, second is horizontal
-getCollisionBetweenCrossedLines :: Line -> Line -> [(Int, Int)]
-getCollisionBetweenCrossedLines ((ax1, ay1), (ax2, ay2)) ((bx1, by1), (bx2, by2))
-  | ax1 >= min bx1 bx2 && ax1 <= max bx1 bx2 && by1 >= min ay1 ay2 && by1 <= max ay1 ay2 =
-    [(ax1, by1)]
-  | otherwise = []
+getMaxX :: [Line] -> Int
+getMaxX [] = 0
+getMaxX (((lx1,ly1), (lx2,ly2)):ls) = max (max lx1 lx2) (getMaxX ls)
 
-getCollisionsBetweenLines :: Line -> Line -> [(Int, Int)]
-getCollisionsBetweenLines main compare
-  | isLineVertical main && isLineVertical compare = getCollisionsBetweenVerticalLines main compare
-  | isLineHorizontal main && isLineHorizontal compare = getCollisionsBetweenHorizontalLines main compare
-  | isLineVertical main && isLineHorizontal compare = getCollisionBetweenCrossedLines main compare
-  | isLineHorizontal main && isLineVertical compare = getCollisionBetweenCrossedLines compare main
-  | otherwise = []
+getMaxY :: [Line] -> Int
+getMaxY [] = 0
+getMaxY (((lx1,ly1), (lx2,ly2)):ls) = max (max ly1 ly2) (getMaxY ls)
 
-aContainsB :: [(Int, Int)] -> (Int, Int) -> Bool
-aContainsB [] (bx, by) = False
-aContainsB ((ax, ay):as) (bx, by)
-  | ax == bx && ay == by = True
-  | otherwise = aContainsB as (bx, by)
+initBoxRow :: Int -> [Int]
+initBoxRow 0 = []
+initBoxRow width = (0 :: Int) : initBoxRow (width - 1)
 
-mergeUnique :: [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
-mergeUnique a [] = a
-mergeUnique a (b:bs)
-  | aContainsB a b = mergeUnique a bs
-  | otherwise = b : mergeUnique a bs
+initBox :: Int -> Int -> [[Int]]
+initBox width 0 = []
+initBox width height = initBoxRow width : initBox width (height - 1)
 
-reduceLinesCollisionsWithCompare :: Line -> Line -> [(Int, Int)] -> [(Int, Int)]
-reduceLinesCollisionsWithCompare main compare reduction =
-  mergeUnique reduction (getCollisionsBetweenLines main compare)
+getBox :: [Line] -> [[Int]]
+getBox filteredLines = initBox (getMaxX filteredLines + 1) (getMaxY filteredLines + 1)
 
-reduceLinesCollisionsWithRest :: Line -> [Line] -> [(Int, Int)] -> [(Int, Int)]
-reduceLinesCollisionsWithRest mainLine compareLines reduction
-  | null compareLines = reduction
-  | otherwise = reduceLinesCollisionsWithRest mainLine (drop 1 compareLines)
-    (reduceLinesCollisionsWithCompare mainLine (head compareLines) reduction)
+incrementBoxRowAtCell :: [Int] -> Int -> [Int]
+incrementBoxRowAtCell row index
+  | index < 0 || index >= length row = error "incrementBoxAtCell called with invalid x-index"
+  | index == 0 = head row + 1 : drop 1 row
+  | otherwise = take index row ++ [(row !! index) + 1] ++ drop (index + 1) row
 
-reduceCollisionsLoop :: [Line] -> [(Int, Int)] -> [(Int, Int)]
-reduceCollisionsLoop [] reduction = reduction
-reduceCollisionsLoop (l:ls) reduction = reduceCollisionsLoop ls (reduceLinesCollisionsWithRest l ls reduction)
+incrementBoxAtCell :: [[Int]] -> Int -> Int -> [[Int]]
+incrementBoxAtCell box x y
+  | y < 0 || y >= length box = error "incrementBoxAtCell called with invalid y-index"
+  | y == 0 = incrementBoxRowAtCell (head box) x : drop 1 box
+  | otherwise = take y box ++ [incrementBoxRowAtCell (box !! y) x] ++ drop (y + 1) box
+
+incrementBoxAtPoints :: [[Int]] -> [(Int, Int)] -> [[Int]]
+incrementBoxAtPoints box [] = box
+incrementBoxAtPoints box ((x,y):ps) = incrementBoxAtPoints (incrementBoxAtCell box x y) ps
+
+addVerticalLineToBox :: [[Int]] -> Line -> [[Int]]
+addVerticalLineToBox box ((x1,y1), (x2,y2))
+  | y1 == y2 = incrementBoxAtCell box x1 y1
+  | otherwise = addVerticalLineToBox (incrementBoxAtCell box x1 (min y1 y2)) ((x1,min y1 y2 + 1), (x2,max y1 y2))
+
+addHorizontalLineToBox :: [[Int]] -> Line -> [[Int]]
+addHorizontalLineToBox box ((x1,y1), (x2,y2))
+  | x1 == x2 = incrementBoxAtCell box x1 y1
+  | otherwise = addHorizontalLineToBox (incrementBoxAtCell box (min x1 x2) y1) ((min x1 x2 + 1,y1), (max x1 x2,y1))
+
+addDiagonalLineToBox :: [[Int]] -> Line -> [[Int]]
+addDiagonalLineToBox box ((x1,y1), (x2,y2)) = incrementBoxAtPoints box (getDiagonalLinePoints x1 y1 x2 y2)
+
+addLineToBox :: [[Int]] -> Line -> [[Int]]
+addLineToBox box line
+  | isLineVertical line = addVerticalLineToBox box line
+  | isLineHorizontal line = addHorizontalLineToBox box line
+  | isLineDiagonal line = addDiagonalLineToBox box line
+  | otherwise = box
+
+fillBox :: [[Int]] -> [Line] -> [[Int]]
+fillBox = foldl addLineToBox
+
+countCollisionsInRow :: [Int] -> Int
+countCollisionsInRow [] = 0
+countCollisionsInRow (c:cs)
+  | c > 1 = 1 + countCollisionsInRow cs
+  | otherwise = countCollisionsInRow cs
+
+countCollisionsInBox :: [[Int]] -> Int
+countCollisionsInBox = foldr ((+) . countCollisionsInRow) 0
 
 countCollisions :: [Line] -> Int
-countCollisions straightLines = length (reduceCollisionsLoop straightLines [])
+countCollisions filteredLines = countCollisionsInBox (fillBox (getBox filteredLines) filteredLines)
 
 task1 :: [Line] -> IO ()
 task1 lines = do
@@ -123,6 +153,13 @@ task1 lines = do
 
   printf "Task 1: collisions=%d\n" collisions
 
+task2 :: [Line] -> IO ()
+task2 lines = do
+  let straightAndDiagonalLines = filterStraightAndDiagonalLines lines
+  let collisions = countCollisions straightAndDiagonalLines
+
+  printf "Task 2: collisions=%d\n" collisions
+
 main = do
   content <- readFile inputFile
   let chars = lines content
@@ -130,5 +167,4 @@ main = do
   let lines = getLines chars
 
   task1 lines
-  -- task2 order boards
-
+  task2 lines
