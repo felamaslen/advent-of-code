@@ -1,8 +1,8 @@
 clean:
-	rm -rf ./lib
+	rm -rf lib
 
 build:
-	mkdir -p lib && gcc ./src/main.c -o ./lib/main
+	mkdir -p lib && ghc -dynamic ./src/Main.hs -o ./lib/Main
 
 run:
-	./lib/main
+	./lib/Main
