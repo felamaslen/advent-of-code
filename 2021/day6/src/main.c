@@ -2,12 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NUM_DAYS 80
 #define INPUT_FILE "./input.txt"
 #define MAX_INITIAL_FISH 1000
 #define BUFFER_SIZE 1000
+#define MAX_N 8
 
-int readInitialFish(int** fish) {
+long long* readInitialFish() {
+  long long* numOfEachN = malloc((MAX_N + 1) * sizeof (long long));
+  for (int n = 0; n <= MAX_N; n++) {
+    numOfEachN[n] = 0;
+  }
+
   FILE* file = fopen(INPUT_FILE, "r");
   if (file == NULL) {
     printf("Error opening input file\n");
@@ -21,54 +26,61 @@ int readInitialFish(int** fish) {
   char* split = strtok(firstLine, delim);
   int f = 0;
   while (split != NULL) {
-    int nextFish = atoi(split);
-    (*fish)[f++] = nextFish;
+    short nextFish = atoi(split);
+    numOfEachN[nextFish]++;
     split = strtok(NULL, delim);
   }
 
   fclose(file);
 
-  int numInitialFish = f;
-  return numInitialFish;
+  return numOfEachN;
 }
 
-void growFish(int** fish, int* numFish, int* bufferSize) {
-  int f, numAdditionalFish = 0;
-  for (f = 0; f < *numFish; f++) {
-    if ((*fish)[f] == 0) {
-      if (*numFish + numAdditionalFish >= *bufferSize - 1) {
-        *bufferSize += BUFFER_SIZE;
-        *fish = realloc(*fish, *bufferSize * sizeof (int));
-      }
-      (*fish)[f] = 6;
-      (*fish)[*numFish + numAdditionalFish] = 8;
-      numAdditionalFish++;
-    } else {
-      (*fish)[f]--;
-    }
-  }
+void growFish(long long** numOfEachN) {
+  long long newNumOfEachN[MAX_N + 1];
 
-  *numFish += numAdditionalFish;
+  newNumOfEachN[0] = (*numOfEachN)[1];
+  newNumOfEachN[1] = (*numOfEachN)[2];
+  newNumOfEachN[2] = (*numOfEachN)[3];
+  newNumOfEachN[3] = (*numOfEachN)[4];
+  newNumOfEachN[4] = (*numOfEachN)[5];
+  newNumOfEachN[5] = (*numOfEachN)[6];
+  newNumOfEachN[6] = (*numOfEachN)[7] + (*numOfEachN)[0];
+  newNumOfEachN[7] = (*numOfEachN)[8];
+  newNumOfEachN[8] = (*numOfEachN)[0];
+
+  for (int n = 0; n <= MAX_N; n++) {
+    (*numOfEachN)[n] = newNumOfEachN[n];
+  }
 }
 
-int growFishForNDays(int* fish, int numFish, int bufferSize, int numDays) {
-  int d, f;
-  for (d = 0; d < numDays; d++) {
-    growFish(&fish, &numFish, &bufferSize);
+long long growFishForNDays(int numDays) {
+  long long* numOfEachN = readInitialFish();
+
+  for (int day = 0; day < numDays; day++) {
+    growFish(&numOfEachN);
   }
 
-  return numFish;
+  long long finalNumFish = 0;
+  for (int n = 0; n <= MAX_N; n++) {
+    finalNumFish += numOfEachN[n];
+  }
+
+  free(numOfEachN);
+  return finalNumFish;
 }
 
 void task1() {
-  int* fish = malloc(BUFFER_SIZE * sizeof (int));
-  int numInitialFish = readInitialFish(&fish);
-  int initialBufferSize = BUFFER_SIZE;
+  long long numFishAfterGrowth = growFishForNDays(80);
+  printf("Task 1: numFishAfterGrowth=%lld\n", numFishAfterGrowth);
+}
 
-  int numFishAfterGrowth = growFishForNDays(fish, numInitialFish, initialBufferSize, NUM_DAYS);
-  printf("Task 1: numFishAfterGrowth=%d\n", numFishAfterGrowth);
+void task2() {
+  long long numFishAfterGrowth = growFishForNDays(256);
+  printf("Task 1: numFishAfterGrowth=%lld\n", numFishAfterGrowth);
 }
 
 int main() {
   task1();
+  task2();
 }
