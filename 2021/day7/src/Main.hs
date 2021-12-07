@@ -6,28 +6,42 @@ inputFile = "./input.txt"
 toInt :: String -> Int
 toInt s = read s :: Int
 
-getMoveCost :: [Int] -> Int -> Int
-getMoveCost crabs pos = foldr (\ c -> (+) (abs (c - pos))) 0 crabs
+getLinearMoveCost :: [Int] -> Int -> Int
+getLinearMoveCost crabs pos = foldr (\ c -> (+) (abs (c - pos))) 0 crabs
 
-getCheapestPossiblePositionLoop :: [Int] -> (Int, Int) -> Int -> (Int, Int)
-getCheapestPossiblePositionLoop crabs (prevPos, prevCost) pos
+linearSum :: Int -> Int
+linearSum n = round (m / 2 * (m + 1)) where m = fromIntegral n :: Float
+
+getExpensiveMoveCost :: [Int] -> Int -> Int
+getExpensiveMoveCost crabs pos = foldr (\ c -> (+) (linearSum (abs (c - pos)))) 0 crabs
+
+getCheapestPossiblePositionLoop :: ([Int] -> Int -> Int) -> [Int] -> (Int, Int) -> Int -> (Int, Int)
+getCheapestPossiblePositionLoop getMoveCost crabs (prevPos, prevCost) pos
   | pos < 0 = (prevPos, prevCost)
   | getMoveCost crabs pos < prevCost =
-    getCheapestPossiblePositionLoop crabs (pos, getMoveCost crabs pos) (pos - 1)
-  | otherwise = getCheapestPossiblePositionLoop crabs (prevPos, prevCost) (pos - 1)
+    getCheapestPossiblePositionLoop getMoveCost crabs (pos, getMoveCost crabs pos) (pos - 1)
+  | otherwise = getCheapestPossiblePositionLoop getMoveCost crabs (prevPos, prevCost) (pos - 1)
+
+getCheapestPossiblePosition :: ([Int] -> Int -> Int) -> [Int] -> (Int, Int)
+getCheapestPossiblePosition getMoveCost crabs = getCheapestPossiblePositionLoop getMoveCost crabs
+  (getMaxPosition crabs, getMoveCost crabs (getMaxPosition crabs))
+  (getMaxPosition crabs)
 
 getMaxPosition :: [Int] -> Int
 getMaxPosition = foldr max 0
 
-getCheapestPossiblePosition :: [Int] -> (Int, Int)
-getCheapestPossiblePosition crabs = getCheapestPossiblePositionLoop crabs
-  (getMaxPosition crabs, getMoveCost crabs (getMaxPosition crabs))
-  (getMaxPosition crabs)
+getLinearCheapestPossiblePosition = getCheapestPossiblePosition getLinearMoveCost
+getExpensiveCheapestPossiblePosition = getCheapestPossiblePosition getExpensiveMoveCost
 
 task1 :: [Int] -> IO ()
 task1 crabs = do
-  let (cheapestPos, cheapestCost) = getCheapestPossiblePosition crabs
+  let (cheapestPos, cheapestCost) = getLinearCheapestPossiblePosition crabs
   printf "Task 1: position=%d, cost=%d\n" cheapestPos cheapestCost
+
+task2 :: [Int] -> IO ()
+task2 crabs = do
+  let (cheapestPos, cheapestCost) = getExpensiveCheapestPossiblePosition crabs
+  printf "Task 2: position=%d, cost=%d\n" cheapestPos cheapestCost
 
 main = do
   content <- readFile inputFile
@@ -35,3 +49,4 @@ main = do
   let crabs = map toInt (splitOn "," (head chars))
 
   task1 crabs
+  task2 crabs
