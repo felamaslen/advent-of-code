@@ -1,3 +1,4 @@
 **/lib
 **/*.hi
 **/*.o
+input_small.txt
