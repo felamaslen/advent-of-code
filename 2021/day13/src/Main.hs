@@ -87,6 +87,9 @@ countDots = foldr ((+) . length . filter (True ==)) 0
 foldOnceAndCountDots :: Board -> [Fold] -> Int
 foldOnceAndCountDots board folds = countDots (foldBoard board (head folds))
 
+foldAll :: Board -> [Fold] -> Board
+foldAll = foldl foldBoard
+
 printBoardRow :: [Bool] -> IO ()
 printBoardRow [] = do printf "\n"
 printBoardRow (c:cs)
@@ -108,9 +111,16 @@ task1 board folds = do
   let numDots = foldOnceAndCountDots board folds
   printf "Task 1: numDots=%d\n" numDots
 
+task2 :: Board -> [Fold] -> IO ()
+task2 board folds = do
+  let folded = foldAll board folds
+  printf "Task 2:\n"
+  printBoard folded
+
 main = do
   content <- readFile inputFile
   let chars = lines content
   let (board, folds) = getInitialBoard chars
 
   task1 board folds
+  task2 board folds
