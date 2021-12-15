@@ -272,9 +272,6 @@ void generatePath(Path_t* path, Point_t* current, Point_t** cameFrom) {
 }
 
 int findOptimalPath(Board_t* board, short verbosity) {
-  Point_t start = {.x = 0, .y = 0};
-  int startH = heuristic(board, &start);
-
   Point_t* openPoints = malloc(board->rows * board->cols * sizeof(Point_t));
   openPoints[0].x = 0;
   openPoints[0].y = 0;
