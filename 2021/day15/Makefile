@@ -6,3 +6,9 @@ build:
 
 run:
 	./lib/Main
+
+build_alt:
+	mkdir -p lib && gcc ./src/alt.c -o ./lib/alt
+
+run_alt:
+	./lib/alt
