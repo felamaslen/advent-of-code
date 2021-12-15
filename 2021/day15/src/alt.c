@@ -369,9 +369,43 @@ int findOptimalPath(Board_t* board, short verbosity) {
   return finalScore;
 }
 
+void extendBoard(Board_t* topLeft, Board_t* result) {
+  int tilesH = 5;
+  int tilesV = 5;
+  int** cells = malloc(tilesV * topLeft->rows * sizeof(int*));
+  int i, j, x, y;
+
+  for (i = 0; i < tilesV; i++) {
+    for (y = 0; y < topLeft->rows; y++) {
+      cells[i*topLeft->rows + y] = malloc(tilesH * topLeft->cols * sizeof(int));
+
+      for (j = 0; j < tilesH; j++) {
+        for (x = 0; x < topLeft->cols; x++) {
+          cells[i*topLeft->rows + y][j * topLeft->cols + x] =
+            1 + ((topLeft->cells[y][x] - 1 + i + j) % 9);
+        }
+      }
+    }
+  }
+
+  result->cells = cells;
+  result->rows = tilesV * topLeft->rows;
+  result->cols = tilesH * topLeft->cols;
+}
+
 void task1(Board_t* board, short verbosity) {
   int finalScore = findOptimalPath(board, verbosity);
   printf("Task 1: final score=%d\n", finalScore);
+}
+
+void task2(Board_t* board, short verbosity) {
+  Board_t* combinedBoard = malloc(sizeof(Board_t));
+  extendBoard(board, combinedBoard);
+
+  int finalScore = findOptimalPath(combinedBoard, verbosity);
+  printf("Task 2: final score=%d\n", finalScore);
+
+  freeBoard(combinedBoard);
 }
 
 int main(int argc, char** argv) {
@@ -394,9 +428,9 @@ int main(int argc, char** argv) {
   Board_t* board = readInput(input);
 
   task1(board, verbosity);
+  task2(board, verbosity);
 
   freeBoard(board);
-  printf("verbosity=%d\n", verbosity);
 
   return 0;
 }
