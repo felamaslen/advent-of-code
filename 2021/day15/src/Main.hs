@@ -1,7 +1,6 @@
 import Data.List
 import Data.List.Split
 import Data.Map (Map)
-import Debug.Trace
 import Text.Printf
 import GHC.IO (unsafePerformIO)
 import Data.Bifunctor.Compat.Repl (Bifunctor(bimap))
@@ -30,18 +29,6 @@ printBoardWithPathLoop y (b:board) path = do
 
 printBoardWithPath :: Board -> Path -> IO ()
 printBoardWithPath = printBoardWithPathLoop 0
-
-clearPrintedBoard :: Board -> IO ()
-clearPrintedBoard [] = do return ()
-clearPrintedBoard (b:board) = do
-  printf "\33[2K\r"
-  printf "\033[A"
-  clearPrintedBoard board
-
-traceBoard :: Board -> Path -> a -> a
-traceBoard board path expr = unsafePerformIO $ do
-  printBoardWithPath board path
-  return expr
 
 getBoard :: [String] -> Board
 getBoard = map (map (\ c -> read [c] :: Int))
@@ -152,9 +139,39 @@ getOptimalPathWithScore board = getOptimalPathLoop board [((start, start), (star
   where start = (0,0)
         startH = heuristic board start
 
+incrementBoard :: Board -> Int -> Board
+incrementBoard board inc = map (map (\ x -> 1 + mod (x-1+inc) 9)) board
+
+reduceTilesRow :: Board -> Int -> Int -> [Board]
+reduceTilesRow topLeft y x
+  | x > 4 = []
+  | otherwise = incrementBoard topLeft (x+y) : reduceTilesRow topLeft y (x+1)
+
+reduceTiles :: Board -> Int -> [[Board]]
+reduceTiles topLeft y
+  | y > 4 = []
+  | otherwise =  reduceTilesRow topLeft y 0 : reduceTiles topLeft (y+1)
+
+mapInd :: (a -> Int -> b) -> [a] -> [b]
+mapInd f l = zipWith f l [0..]
+
+combineTiles :: [[Board]] -> Board
+combineTiles [] = []
+combineTiles (r:tileRows) = rows ++ combineTiles tileRows
+  where
+    rows = mapInd (\ _ idx -> concatMap (!! idx) r) (head r)
+
+extendBoard :: Board -> Board
+extendBoard board = combineTiles (reduceTiles board 0)
+
 task1 :: Board -> IO ()
 task1 board = do
   let (path, score) = getOptimalPathWithScore board
+  printf "score=%d\n" score
+
+task2 :: Board -> IO ()
+task2 board = do
+  let (path, score) = getOptimalPathWithScore (extendBoard board)
   printf "score=%d\n" score
 
 main = do
@@ -163,3 +180,4 @@ main = do
   let board = getBoard chars
 
   task1 board
+  task2 board
