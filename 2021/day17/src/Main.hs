@@ -64,7 +64,10 @@ getTopOfShotLoop previousTop vectors
 getTopOfShot :: Velocity -> Int
 getTopOfShot velocity = getTopOfShotLoop 0 ((0,0),velocity)
 
-type Reduction = (Velocity, Int) -- max height
+data Reduction = Reduction { velocity :: Velocity
+                           , maxHeight :: Int
+                           , numReachedTarget :: Int
+                           } deriving (Show)
 
 findBestShotReachingTargetWithFixedVY :: TargetArea -> Int -> Int -> Reduction -> Reduction
 findBestShotReachingTargetWithFixedVY targetArea vy vx red
@@ -72,7 +75,13 @@ findBestShotReachingTargetWithFixedVY targetArea vy vx red
   | otherwise = findBestShotReachingTargetWithFixedVY targetArea vy (vx+1) nextReduction
   where reachesTarget = shotReachesTarget targetArea (vx,vy)
         topOfShot = if reachesTarget then getTopOfShot (vx,vy) else 0
-        nextReduction = if topOfShot > snd red then ((vx,vy),topOfShot) else red
+        nextNumReachedTarget = if reachesTarget
+                                  then numReachedTarget red + 1
+                                  else numReachedTarget red
+        bestVelocity = if topOfShot > maxHeight red
+                          then (vx,vy)
+                          else velocity red
+        nextReduction = Reduction bestVelocity (max topOfShot (maxHeight red)) nextNumReachedTarget
 
 findBestShotReachingTargetLoop :: TargetArea -> Int -> Reduction -> Reduction
 findBestShotReachingTargetLoop targetArea vy red
@@ -81,16 +90,21 @@ findBestShotReachingTargetLoop targetArea vy red
   where bestShot = findBestShotReachingTargetWithFixedVY targetArea vy 0 red
 
 findBestShotReachingTarget :: TargetArea -> Reduction
-findBestShotReachingTarget targetArea = findBestShotReachingTargetLoop targetArea (highestGuessY targetArea) ((0,0),0)
+findBestShotReachingTarget targetArea = findBestShotReachingTargetLoop targetArea (highestGuessY targetArea) (Reduction (0,0) 0 0)
 
-task1 :: TargetArea -> IO ()
-task1 targetArea = do
-  let bestShot = findBestShotReachingTarget targetArea
-  printf "Task 1: %s\n" (show bestShot)
+task1 :: Reduction -> IO ()
+task1 bestShot = do
+  printf "Task 1: bestHeight=%d\n" (maxHeight bestShot)
+
+task2 :: Reduction -> IO ()
+task2 bestShot = do
+  printf "Task 2: numReachedTarget=%d\n" (numReachedTarget bestShot)
 
 main = do
   content <- readFile inputFile
   let chars = lines content
   let targetArea = getTargetArea (head chars)
+  let bestShot = findBestShotReachingTarget targetArea
 
-  task1 targetArea
+  task1 bestShot
+  task2 bestShot
