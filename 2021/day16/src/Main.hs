@@ -129,16 +129,6 @@ applyOperator op stack
   | op == 6 = if head stack < last stack then 1 else 0
   | op == 7 = if head stack == last stack then 1 else 0
 
-getOpName :: Int -> String
-getOpName op
-  | op == 0 = "sum"
-  | op == 1 = "prod"
-  | op == 2 = "min"
-  | op == 3 = "max"
-  | op == 5 = "gt"
-  | op == 6 = "lt"
-  | op == 7 = "eq"
-
 reducePacket :: Packet -> Int
 reducePacket packet
   | isOperator packet = applyOperator (typeId packet) (map reducePacket (children packet))
@@ -147,14 +137,6 @@ reducePacket packet
 pad :: Int -> String
 pad 0 = ""
 pad n = ' ' : pad (n-1)
-
-printPackets :: [Packet] -> Int -> IO ()
-printPackets [] _ = do return ()
-printPackets (p:packets) n = do
-  let padding = pad n
-  printf "%stypeId=%d, version=%d, v=%s\n" padding (typeId p) (version p) (show (value p))
-  printPackets (children p) (n+1)
-  printPackets packets n
 
 task1 :: String -> IO ()
 task1 transmission = do

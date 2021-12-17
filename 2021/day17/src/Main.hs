@@ -1,5 +1,4 @@
 import Data.List.Split (splitOn)
-import Debug.Trace
 import Text.Printf
 
 inputFile = "./input.txt"
