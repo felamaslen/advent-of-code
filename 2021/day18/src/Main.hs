@@ -201,6 +201,14 @@ getPartMagnitude part = case part of
 getMagnitude :: Snail -> Int
 getMagnitude snail = 3 * getPartMagnitude (left snail) + 2 * getPartMagnitude (right snail)
 
+getMaximumFromIndexToRest :: [Snail] -> Int -> Int
+getMaximumFromIndexToRest snails i = maximum (map (getMagnitude . addSnails current) rest)
+  where rest = take i snails ++ drop (i+1) snails
+        current = snails !! i
+
+getLargestSumMagnitude :: [Snail] -> Int
+getLargestSumMagnitude snails = maximum (map (getMaximumFromIndexToRest snails) [0..(length snails - 1)])
+
 parseSnailLoop :: String -> Int -> [Either Int Snail] -> Snail
 parseSnailLoop "" _ stack
   | length stack /= 1 = error ("Invalid final stack length of "++show (length stack))
@@ -223,9 +231,15 @@ task1 snails = do
   let result = getMagnitude (sumSnails snails)
   printf "Task 1: result=%d\n" result
 
+task2 :: [Snail] -> IO ()
+task2 snails = do
+  let result = getLargestSumMagnitude snails
+  printf "Task 2: result=%d\n" result
+
 main :: IO ()
 main = do
   content <- readFile inputFile
   let snails = map parseSnail (lines content)
 
   task1 snails
+  task2 snails
