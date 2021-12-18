@@ -209,22 +209,22 @@ getMaximumFromIndexToRest snails i = maximum (map (getMagnitude . addSnails curr
 getLargestSumMagnitude :: [Snail] -> Int
 getLargestSumMagnitude snails = maximum (map (getMaximumFromIndexToRest snails) [0..(length snails - 1)])
 
-parseSnailLoop :: String -> Int -> [Either Int Snail] -> Snail
-parseSnailLoop "" _ stack
+parseSnailLoop :: String -> [Either Int Snail] -> Snail
+parseSnailLoop "" stack
   | length stack /= 1 = error ("Invalid final stack length of "++show (length stack))
   | otherwise = case head stack of
                   Right snail -> snail
                   Left v -> error ("Invalid final stack value of "++show v)
-parseSnailLoop str depth stack
-  | char == '[' = parseSnailLoop (tail str) (depth+1) stack
-  | char == ']' = parseSnailLoop (tail str) (depth-1) (Right (Snail (stack !! 1) (head stack)) : drop 2 stack)
-  | char == ',' = parseSnailLoop (tail str) depth stack
-  | otherwise = parseSnailLoop (tail str) depth (Left (toInt (head str)) : stack)
+parseSnailLoop str stack
+  | char == '[' = parseSnailLoop (tail str) stack
+  | char == ']' = parseSnailLoop (tail str) (Right (Snail (stack !! 1) (head stack)) : drop 2 stack)
+  | char == ',' = parseSnailLoop (tail str) stack
+  | otherwise = parseSnailLoop (tail str) (Left (toInt (head str)) : stack)
 
   where char = head str
 
 parseSnail :: String -> Snail
-parseSnail str = parseSnailLoop str 0 []
+parseSnail str = parseSnailLoop str []
 
 task1 :: [Snail] -> IO ()
 task1 snails = do
