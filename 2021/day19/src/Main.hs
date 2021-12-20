@@ -25,6 +25,9 @@ type Dist = Int
 dist :: Point -> Point -> Dist -- cartesian distance squared
 dist (Point x1 y1 z1) (Point x2 y2 z2) = (x1-x2)^2 + (y1-y2)^2 + (z1-z2)^2
 
+manhattanDist :: Point -> Point -> Dist
+manhattanDist (Point x1 y1 z1) (Point x2 y2 z2) = abs (x1-x2) + abs (y1-y2) + abs (z1-z2)
+
 -- 3D transform matrix
 data Orientation = Orientation { row0 :: Point
                                , row1 :: Point
@@ -256,43 +259,12 @@ getScannerPositionWithTransform :: [Point] -> [Point] -> Orientation -> Maybe (P
 getScannerPositionWithTransform a b orient
   | maximum dx == minimum dx && maximum dy == minimum dy && maximum dz == minimum dz =
     Just (Point (head dx) (head dy) (head dz), orient)
-  | otherwise = -- traceShow ("tried-> dx="++show dx++"; dy="++show dy++"; dz="++show dz)
-                  Nothing
+  | otherwise = Nothing
   where diff = zipWith (\ (Point x1 y1 z1) (Point x2 y2 z2) -> Point (x1-x2) (y1-y2) (z1-z2))
           a (map (transformPoint orient) b)
         dx = map x diff
         dy = map y diff
         dz = map z diff
-
--- getScannerPosition :: [Point] -> [Point] -> (Point, Orientation)
--- getScannerPosition a b
---   | isInvariantZ = (Point dx dy (head dz), tInvariantXY)
---   | otherwise = error "could not find transform invariant for Z coordinates"
---   where getInvariantXTransform :: Int -> Int -> (Int, Orientation)
---         getInvariantXTransform y z
---           | isInvariantX = (head dx, t)
---           | y == 3 && z == 3 = error "could not find transform invariant for X coordinates"
---           | y < 3 = getInvariantXTransform (y+1) z
---           | otherwise = getInvariantXTransform 0 (z+1)
---           where t = composeOrientate (orientRotateAroundY y) (orientRotateAroundZ z)
---                 dx = zipWith (-) (map x a) (map (x . transformPoint t) b)
---                 isInvariantX = maximum dx == minimum dx
--- 
---         getInvariantXYTransform :: Orientation -> Int -> (Int, Orientation)
---         getInvariantXYTransform tInvariantX x
---           | isInvariantY = (head dy, t)
---           | x == 3 = error "could not find transform invariant for Y coordinates"
---           | otherwise = getInvariantXYTransform tInvariantX (x+1)
---           where t = composeOrientate (orientRotateAroundX x) tInvariantX
---                 dy = zipWith (-) (map y a) (map (y . transformPoint t) b)
---                 isInvariantY = maximum dy == minimum dy
--- 
---         (dx, tInvariantX) = getInvariantXTransform 0 0
---         (dy, tInvariantXY) = getInvariantXYTransform tInvariantX 0
--- 
---         dz = zipWith (-) (map z a) (map (z . transformPoint tInvariantXY) b)
---         isInvariantZ = maximum dz == minimum dz
-        
 
 -- Get position, orientation of scanner B relative to scanner A, based on their overlapping beacons
 getScannerPosition :: [Point] -> [Point] -> (Point, Orientation)
@@ -354,8 +326,7 @@ deduceScannerPositions scanners = deduceScannerPositionsLoop initialQueue initia
                                 (q', Just (a', b')) -> (q', (a', b'))
                                 (_, Nothing) -> error "filter didn't work properly?"
                 nextQueue = filter (\ s -> index s /= index q) queue
-                nextNormalisedScanners = traceShow ("normalised scanner "++show (index q))
-                  (normalisedScanners ++ [normaliseScanner q a b])
+                nextNormalisedScanners = normalisedScanners ++ [normaliseScanner q a b]
 
 filterUnique :: [Point] -> [Point]
 filterUnique [] = []
@@ -367,291 +338,31 @@ filterUnique (p:points)
 getUniqueBeacons :: [Scanner] -> [Point]
 getUniqueBeacons scanners = filterUnique (concatMap beacons scanners)
 
-printRows :: Show a => [a] -> IO ()
-printRows [] = do return ()
-printRows (r:rs) = do
-  print r
-  printRows rs
-
-sortByX :: [Point] -> [Point]
-sortByX = sortBy (\ (Point x1 _ _) (Point x2 _ _) -> compare x1 x2)
-
-sortByY :: [Point] -> [Point]
-sortByY = sortBy (\ (Point _ y1 _) (Point _ y2 _) -> compare y1 y2)
-
-sortByZ :: [Point] -> [Point]
-sortByZ = sortBy (\ (Point _ _ z1) (Point _ _ z2) -> compare z1 z2)
-
-mapDist :: [Point] -> [Int]
-mapDist (p:ps)
-  | null ps = []
-  | otherwise = dist p (head ps) : mapDist ps
+getLargestManhattanDistance :: [Scanner] -> Int
+getLargestManhattanDistance [] = 0
+getLargestManhattanDistance (sA:scanners)
+  | null scanners = 0
+  | otherwise = max (maximum (map (manhattanDist posA) rest)) (getLargestManhattanDistance scanners)
+  where posA = case position sA of
+                 Just p -> p
+                 Nothing -> error "all scanners must be normalised"
+        rest = map (\s -> case position s of
+                            Just p -> p
+                            Nothing -> error "all scanners must be normalised") scanners
 
 task1 :: [Scanner] -> IO ()
-task1 scanners = do
-  let result = (length . getUniqueBeacons . deduceScannerPositions) scanners
+task1 normalisedScanners = do
+  let result = (length . getUniqueBeacons) normalisedScanners
   printf "Task 1: numBeacons=%d\n" result
 
--- findMatchingOrient :: [Point] -> [Point] -> Int -> Int -> Int -> (Point, Orientation)
--- findMatchingOrient a b rx ry rz = fromMaybe nextLoop result
---   where t = composeOrientate (orientRotateAroundX rx) (composeOrientate (orientRotateAroundY ry) (orientRotateAroundZ rz))
---         result = traceShow (show (Point rx ry rz)) (getScannerPositionWithTransform a b t)
---         nextLoop
---           | rx == 3 && ry == 3 && rz == 3 = error "points do not overlap in any orientation"
---           | rz < 3 = findMatchingOrient a b rx ry (rz+1)
---           | ry < 3 = findMatchingOrient a b rx (ry+1) (-3)
---           | otherwise = findMatchingOrient a b (rx+1) (-3) (-3)
-
+task2 :: [Scanner] -> IO ()
+task2 normalisedScanners = do
+  let result = getLargestManhattanDistance normalisedScanners
+  printf "Task 2: manhattanDistance=%d\n" result
 
 main = do
   content <- readFile inputFile
-  let scanners = getInitialScanners (lines content)
+  let normalisedScanners = (deduceScannerPositions . getInitialScanners) (lines content)
 
-  -- let deduced = deduceScannerPositions scanners
-  -- print deduced
-
-  -- let queue = filter (\ c -> index c /= 0) scanners
-  -- let normalisedScanners = filter (\ c -> index c == 0) scanners
-  -- let fromScanners = normalisedScanners
-  -- printf "ql=%d, nl=%d, fl=%d\n" (length queue) (length normalisedScanners) (length fromScanners)
-
-  -- let compareFrom = head fromScanners
-  -- let withOverlappingBeacons = (
-  --       filter (\ (_, overlappingBeacons) -> case overlappingBeacons of
-  --                   Nothing -> False
-  --                   Just _ -> True) .
-  --       map (\ q -> (q, getOverlappingBeacons compareFrom q)))
-  --       queue
-  -- -- let nextFromOptions = filter (`notElem` fromScanners) queue
-  -- let (q, (a, b)) = case head withOverlappingBeacons of
-  --                     (q', Just (a', b')) -> (q', (a', b'))
-  --                     (_, Nothing) -> error "filter didn't work properly?"
-  -- let nextQueue = filter (\ s -> index s /= index q) queue
-  -- let queue = nextQueue
-  -- let nextNormalisedScanners = normalisedScanners ++ [normaliseScanner q a b]
-  -- let normalisedScanners = nextNormalisedScanners
-
-  -- printf "ql=%d, nl=%d, fl=%d\n" (length queue) (length normalisedScanners) (length fromScanners)
-
-  -- let compareFrom = head fromScanners
-  -- let withOverlappingBeacons = (
-  --       filter (\ (_, overlappingBeacons) -> case overlappingBeacons of
-  --                   Nothing -> False
-  --                   Just _ -> True) .
-  --       map (\ q -> (q, getOverlappingBeacons compareFrom q)))
-  --       queue
-  -- -- let nextFromOptions = filter (`notElem` fromScanners) queue
-  -- let (q, (a, b)) = case head withOverlappingBeacons of
-  --                     (q', Just (a', b')) -> (q', (a', b'))
-  --                     (_, Nothing) -> error "filter didn't work properly?"
-  -- let nextQueue = filter (\ s -> index s /= index q) queue
-  -- let queue = nextQueue
-  -- let nextNormalisedScanners = normalisedScanners ++ [normaliseScanner q a b]
-  -- let normalisedScanners = nextNormalisedScanners
-
-  -- printf "ql=%d, nl=%d, fl=%d\n" (length queue) (length normalisedScanners) (length fromScanners)
-
-  -- let compareFrom = head fromScanners
-  -- let withOverlappingBeacons = (
-  --       filter (\ (_, overlappingBeacons) -> case overlappingBeacons of
-  --                   Nothing -> False
-  --                   Just _ -> True) .
-  --       map (\ q -> (q, getOverlappingBeacons compareFrom q)))
-  --       queue
-  -- let nextFromOptions = filter (`notElem` fromScanners) normalisedScanners
-  -- let fromScanners = nextFromOptions
-  -- -- let nextFromOptions = filter (`notElem` fromScanners) queue
-  -- -- let (q, (a, b)) = case head withOverlappingBeacons of
-  -- --                     (q', Just (a', b')) -> (q', (a', b'))
-  -- --                     (_, Nothing) -> error "filter didn't work properly?"
-  -- -- let nextQueue = filter (\ s -> index s /= index q) queue
-  -- -- let queue = nextQueue
-  -- -- let nextNormalisedScanners = normalisedScanners ++ [normaliseScanner q a b]
-  -- -- let normalisedScanners = nextNormalisedScanners
-
-  -- printf "ql=%d, nl=%d, fl=%d\n" (length queue) (length normalisedScanners) (length fromScanners)
-
-  -- let compareFrom = head fromScanners
-  -- let withOverlappingBeacons = (
-  --       filter (\ (_, overlappingBeacons) -> case overlappingBeacons of
-  --                   Nothing -> False
-  --                   Just _ -> True) .
-  --       map (\ q -> (q, getOverlappingBeacons compareFrom q)))
-  --       queue
-  -- -- let nextFromOptions = filter (`notElem` fromScanners) queue
-  -- -- let fromScanners = nextFromOptions
-  -- let nextFromOptions = filter (`notElem` fromScanners) queue
-  -- let (q, (a, b)) = case head withOverlappingBeacons of
-  --                     (q', Just (a', b')) -> (q', (a', b'))
-  --                     (_, Nothing) -> error "filter didn't work properly?"
-  -- let nextQueue = filter (\ s -> index s /= index q) queue
-  -- let queue = nextQueue
-  -- let nextNormalisedScanners = normalisedScanners ++ [normaliseScanner q a b]
-  -- let normalisedScanners = nextNormalisedScanners
-
-  -- printf "ql=%d, nl=%d, fl=%d\n" (length queue) (length normalisedScanners) (length fromScanners)
-  -- -- print nextNormalisedScanners
-
-  -- print (head initialQueue)
-  -- print initialNormalised
-
-  task1 scanners
-
-  -- let (a,b) = case getOverlappingBeacons (head scanners) (scanners !! 27) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner27 = normaliseScanner (scanners !! 27) a b
-
-  -- let (a,b) = case getOverlappingBeacons (head scanners) (scanners !! 36) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-
-  -- let t = composeOrientate (orientRotateAroundY 1) (orientRotateAroundZ 0)
-  -- let dx = zipWith (-) (map x a) (map (x . transformPoint t) b)
-  -- let isInvariantX = maximum dx == minimum dx
-  -- printf "isInvariantX=%s\n" (show isInvariantX)
-  -- print dx
-
-  -- let tInvariantX = t
-
-  -- let t = composeOrientate (orientRotateAroundX (0)) tInvariantX
-  -- let dy = zipWith (-) (map y a) (map (y . transformPoint t) b)
-  -- let isInvariantY = maximum dy == minimum dy
-  -- printf "isInvariantY=%s\n" (show isInvariantY)
-  -- print dy
-
-  -- let scanner36 = normaliseScanner (scanners !! 36) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner27 (scanners !! 19) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner19 = normaliseScanner (scanners !! 19) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner27 (scanners !! 21) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner21 = normaliseScanner (scanners !! 21) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner27 (scanners !! 28) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner28 = normaliseScanner (scanners !! 28) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner27 (scanners !! 35) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner35 = normaliseScanner (scanners !! 35) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner36 (scanners !! 32) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner32 = normaliseScanner (scanners !! 32) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner19 (scanners !! 31) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner31 = normaliseScanner (scanners !! 31) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner19 (scanners !! 34) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner34 = normaliseScanner (scanners !! 34) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner21 (scanners !! 13) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner13 = normaliseScanner (scanners !! 13) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner21 (scanners !! 33) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner33 = normaliseScanner (scanners !! 33) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner28 (scanners !! 39) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner39 = normaliseScanner (scanners !! 39) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner35 (scanners !! 11) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner11 = normaliseScanner (scanners !! 11) a b
-
-  -- let (a,b) = case getOverlappingBeacons scanner35 (scanners !! 18) of
-  --               Nothing -> error "wtf"
-  --               Just r -> r
-  -- let scanner18 = normaliseScanner (scanners !! 18) a b
-
-  -- let idx = (head . filter (\ i ->
-  --             case getOverlappingBeacons (scanners !! 35) (scanners !! i) of
-  --               Nothing -> False
-  --               Just _ -> True)) ([1..10] ++ [12] ++ [14..17] ++ [20] ++ [22..26] ++ [29..30] ++ [37..38])
-  -- print idx
-
-  -- print (zip a b)
-
-  -- -- (-3,-3,-3); then rotate around X or Z axis
-  -- print "finding invariant X transform"
-  -- let tInvariantX = composeOrientate (orientRotateAroundY 1) (orientRotateAroundZ 0)
-  -- let diff = zipWith (\ (Point x1 y1 z1) (Point x2 y2 z2) -> Point (x1-x2) (y1-y2) (z1-z2))
-  --             a (map (transformPoint tInvariantX) b)
-  -- let dx = map x diff
-  -- let dy = map y diff
-  -- let dz = map z diff
-  -- printf "dx=%s\n" (show dx)
-  -- printf "dy=%s\n" (show dy)
-  -- printf "dz=%s\n" (show dz)
-
-  -- print "finding invariant XY transform"
-  -- let tInvariantXY = composeOrientate (orientRotateAroundX 2) tInvariantX
-  -- let diff = zipWith (\ (Point x1 y1 z1) (Point x2 y2 z2) -> Point (x1-x2) (y1-y2) (z1-z2))
-  --             a (map (transformPoint tInvariantXY) b)
-  -- let dx = map x diff
-  -- let dy = map y diff
-  -- let dz = map z diff
-  -- printf "dx=%s\n" (show dx)
-  -- printf "dy=%s\n" (show dy)
-  -- printf "dz=%s\n" (show dz)
-
-  -- print "finding invariant XZ transform"
-  -- let tInvariantXZ = composeOrientate (orientRotateAroundX (-3)) tInvariantX
-  -- let diff = zipWith (\ (Point x1 y1 z1) (Point x2 y2 z2) -> Point (x1-x2) (y1-y2) (z1-z2))
-  --             a (map (transformPoint tInvariantXZ) b)
-  -- let dx = map x diff
-  -- let dy = map y diff
-  -- let dz = map z diff
-  -- printf "dx=%s\n" (show dx)
-  -- printf "dy=%s\n" (show dy)
-  -- printf "dz=%s\n" (show dz)
-
-  -- print "finding invariant XYZ transform"
-  -- let tInvariantXYZ = composeOrientate (orientRotateAroundZ 0) tInvariantXZ
-  -- let diff = zipWith (\ (Point x1 y1 z1) (Point x2 y2 z2) -> Point (x1-x2) (y1-y2) (z1-z2))
-  --             a (map (transformPoint tInvariantXYZ) b)
-  -- let dx = map x diff
-  -- let dy = map y diff
-  -- let dz = map z diff
-  -- printf "dx=%s\n" (show dx)
-  -- printf "dy=%s\n" (show dy)
-  -- printf "dz=%s\n" (show dz)
-
-  -- print tInvariantXZ
-  -- print (orientRotateAroundZ 0)
-  -- print (composeOrientate (orientRotateAroundZ 0) tInvariantXZ)
-  -- print tInvariantXYZ
-
-  -- let result = findMatchingOrient a b (-3) (-3) (-3)
-  -- print result
-
-  -- let t = composeOrientate (orientRotateAroundX 1) (composeOrientate (orientRotateAroundY 0) (orientRotateAroundZ 0))
-
-  -- let diff = zipWith (\ (Point x1 y1 z1) (Point x2 y2 z2) -> Point (x1-x2) (y1-y2) (z1-z2))
-  --             a (map (transformPoint t) b)
-
-  -- let dx = map x diff
-  -- let dy = map y diff
-  -- let dz = map z diff
-
-  -- printf "%s, %s, %s\n" (show dx) (show dy) (show dz)
-
-  -- print (getOverlappingBeacons (head scanners) (scanners !! idx))
+  task1 normalisedScanners
+  task2 normalisedScanners
