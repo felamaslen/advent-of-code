@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
 import Data.List.Split
-import Debug.Trace
 import Text.Printf
 import Data.List (sort, sortBy)
 import Data.Maybe (fromMaybe)
