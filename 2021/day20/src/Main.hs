@@ -1,4 +1,3 @@
-import Debug.Trace
 import Text.Printf
 
 inputFile = "./input.txt"
@@ -42,16 +41,22 @@ mergeImage to from ox oy = take oy to ++
   ) [oy..oy + length from - 1] ++
     drop (oy + length from) to
 
-enhanceImage :: Enhancer -> Image -> Bool -> Image
-enhanceImage enhancer (Image image) alreadyEnhanced = Image result
+enhanceImage :: Enhancer -> Image -> Maybe Char -> (Image, Maybe Char)
+enhanceImage enhancer (Image image) prevSurroundingChar = (Image result, Just surroundingCharacter)
   where maxX = length (head image) - 1
         maxY = length image - 1
 
         enhanceImageRow :: Int -> [Char]
         enhanceImageRow y = map (enhanceImagePixel y) [-2..maxX+2]
 
+        surroundingCharacter =
+          case prevSurroundingChar of
+            Nothing -> '.'
+            Just c -> enhancer !! binToDec
+              (map (charToBin . const c) [0..8])
+
         pixelAt x y
-          | x < 0 || x > maxX || y < 0 || y > maxY = if alreadyEnhanced then head enhancer else '.'
+          | x < 0 || x > maxX || y < 0 || y > maxY = surroundingCharacter
           | otherwise = (image !! y) !! x
 
         getPixelsAround :: Int -> Int -> [[Char]]
@@ -75,26 +80,33 @@ enhanceImage enhancer (Image image) alreadyEnhanced = Image result
         result = map enhanceImageRow [-2..maxY+2]
 
 enhanceNTimes :: Int -> Enhancer -> Image -> Image
-enhanceNTimes n enhancer = enhanceLoop 0
-  where enhanceLoop i result
-          | i >= n = result
-          | otherwise = enhanceLoop (i+1) (enhanceImage enhancer result (i>0))
+enhanceNTimes n enhancer originalImage = enhanceLoop 0 (originalImage, Nothing)
+  where enhanceLoop i (image, prevSurroundingChar)
+          | i >= n = image
+          | otherwise = enhanceLoop (i+1) (next, surroundingCharacter)
+            where (next, surroundingCharacter) = enhanceImage enhancer image prevSurroundingChar
 
-enhanceTwice = enhanceNTimes 2
-
-countLitPixels :: Image -> Int
+countLitPixels :: Image -> Int -- inaccurate in the case when every surrounding character is lit
 countLitPixels (Image image) = countLoop image
   where countLoop [] = 0
         countLoop (r:rows) = length (filter (== '#') r) + countLoop rows
 
 task1 :: Enhancer -> Image -> IO ()
 task1 enhancer input = do
-  let enhancedTwice = enhanceTwice enhancer input
+  let enhancedTwice = enhanceNTimes 2 enhancer input
 
   let numLitPixels = countLitPixels enhancedTwice
   printf "Task 1: numLitPixels=%d\n" numLitPixels
+
+task2 :: Enhancer -> Image -> IO ()
+task2 enhancer input = do
+  let enhancedFifty = enhanceNTimes 50 enhancer input
+
+  let numLitPixels = countLitPixels enhancedFifty
+  printf "Task 2: numLitPixels=%d\n" numLitPixels
 
 main = do
   content <- readFile inputFile
   let (enhancer, input) = getInitialParameters (lines content)
   task1 enhancer input
+  task2 enhancer input
