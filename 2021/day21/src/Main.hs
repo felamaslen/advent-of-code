@@ -76,27 +76,23 @@ playGameDeterministic = playGameSimple (Die 0 (\ p -> mod p 100 + 1) 0)
 -- Map of 3-throw sum to number of permutations of the given sum
 numDiracThrows = zip ([3,4,5,6,7,8,9]::[Int]) ([1,3,6,7,6,3,1]::[Int])
 
-playGameDirac :: Game -> (Int, Int)
-playGameDirac game = playGameLoop game 1 (0, 0)
+playGameDirac :: Game -> Int
+playGameDirac game = playGameLoop game 1 0
   where
-    playGameLoop :: Game -> Int -> (Int, Int) -> (Int, Int)
-    playGameLoop prevGame numOfThisBranch (p1, p2) = (n1, n2)
+    playGameLoop :: Game -> Int -> Int -> Int
+    playGameLoop prevGame numOfThisBranch prev = next
       where
-        playWithThrows :: (Int, Int) -> (Int, Int)
+        playWithThrows :: (Int, Int) -> Int
         playWithThrows (sumThrows, numBranches)
-          | winner == 0 = playGameLoop nextGame numOfThisGame (0, 0)
-          | winner == 1 = (numOfThisGame, 0)
-          | winner == 2 = (0, numOfThisGame)
+          | winner == 0 = playGameLoop nextGame numOfThisGame 0
+          | winner == 1 = numOfThisGame
+          | otherwise = 0
           where
             numOfThisGame = numBranches * numOfThisBranch
             nextGame = playGameTurn prevGame sumThrows
             winner = winningPlayer 21 nextGame
+        next = foldr ((+) . playWithThrows) prev numDiracThrows                  
 
-        (n1, n2) = foldr
-          ((\ (a1, a2) (b1, b2) -> (b1 + a1, b2 + a2)) . playWithThrows)
-          (p1, p2)
-          numDiracThrows
-                  
 task1 :: Game -> IO ()
 task1 game = do
   let (die, finishedGame) = playGameDeterministic game
@@ -105,8 +101,7 @@ task1 game = do
 
 task2 :: Game -> IO ()
 task2 game = do
-  let (numPlayer1Wins, numPlayer2Wins) = playGameDirac game
-  let result = max numPlayer1Wins numPlayer2Wins
+  let result = playGameDirac game
   printf "Task 2: result=%d\n" result
 
 main = do
