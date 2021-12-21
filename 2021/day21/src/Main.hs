@@ -9,10 +9,6 @@ data Game = Game { player1 :: Player
                  , player2 :: Player
                  , turn :: Int }
 
-data Die = Die { faceValue :: Int
-               , roll :: Int -> Int
-               , numRolls :: Int }
-
 printGameTile :: Player -> Player -> Int -> String
 printGameTile (Player pos0 score0) (Player pos1 score1) i
   | pos0 == i && pos1 == i = "[(1->"++show score0++"),(2->"++show score1++")] "
@@ -24,6 +20,13 @@ instance Show Game where
   show (Game p1 p2 turn) = "Player "++show (turn+1)++" to move: "++
     concatMap (printGameTile p1 p2) [1..10]
 
+data Die = Die { faceValue :: Int
+               , roll :: Int -> Int
+               , numRolls :: Int }
+
+instance Show Die where
+  show (Die faceValue _ numRolls) = "value="++show faceValue++", numRolls="++show numRolls
+
 initGame :: [String] -> Game
 initGame [l0, l1] = Game (Player pos0 0) (Player pos1 0) 0
   where pos0 = read ((last.words) l0) :: Int
@@ -32,44 +35,82 @@ initGame [l0, l1] = Game (Player pos0 0) (Player pos1 0) 0
 rollDie :: Die -> Die
 rollDie (Die faceValue roll numRolls) = Die (roll faceValue) roll (numRolls+1)
 
-playTurn :: Player -> Int -> Player
-playTurn (Player position score) moves = Player nextPosition nextScore
+playPlayerTurn :: Player -> Int -> Player
+playPlayerTurn (Player position score) moves = Player nextPosition nextScore
   where nextPosition = mod (position + moves - 1) 10 + 1
         nextScore = score + nextPosition
 
-playGameStep :: Die -> Game -> (Die, Game)
-playGameStep die game = (rolled2, Game nextPlayer1 nextPlayer2 nextTurn)
+playGameTurn :: Game -> Int -> Game
+playGameTurn game steps = Game nextPlayer1 nextPlayer2 nextTurn
   where Game player1 player2 turn = game
-        rolled0 = rollDie die
+        (nextPlayer1, nextPlayer2) =
+          if turn == 0
+            then (playPlayerTurn player1 steps, player2)
+            else (player1, playPlayerTurn player2 steps)
+        nextTurn = mod (turn+1) 2
+
+winningPlayer :: Int -> Game -> Int
+winningPlayer finishingScore (Game player1 player2 _)
+  | score player1 >= finishingScore = 1
+  | score player2 >= finishingScore = 2
+  | otherwise = 0
+
+playGameStepSimple :: Die -> Game -> (Die, Game)
+playGameStepSimple die game = (rolled2, nextGame)
+  where rolled0 = rollDie die
         rolled1 = rollDie rolled0
         rolled2 = rollDie rolled1
         sumRolls = (sum . map faceValue) [rolled0, rolled1, rolled2]
-        (nextPlayer1, nextPlayer2) =
-          if turn == 0
-            then (playTurn player1 sumRolls, player2)
-            else (player1, playTurn player2 sumRolls)
-        nextTurn = mod (turn+1) 2
+        nextGame = playGameTurn game sumRolls
 
-playGame :: Die -> Game -> (Die, Game)
-playGame die game
-  | maxScore >= 1000 = (die, game)
-  | otherwise = playGame nextDie nextGame
+playGameSimple :: Die -> Game -> (Die, Game)
+playGameSimple die game
+  | winner == 0 = playGameSimple nextDie nextGame
+  | otherwise = (die, game)
   where Game player1 player2 turn = game
-        maxScore = max (score player1) (score player2)
-        (nextDie, nextGame) = playGameStep die game
+        winner = winningPlayer 1000 game
+        (nextDie, nextGame) = playGameStepSimple die game
 
-deterministicDie :: Die
-deterministicDie = Die 0 (\ p -> mod p 100 + 1) 0
+playGameDeterministic = playGameSimple (Die 0 (\ p -> mod p 100 + 1) 0)
 
-playGameDeterministic = playGame deterministicDie
+-- Map of 3-throw sum to number of permutations of the given sum
+numDiracThrows = zip ([3,4,5,6,7,8,9]::[Int]) ([1,3,6,7,6,3,1]::[Int])
 
+playGameDirac :: Game -> (Int, Int)
+playGameDirac game = playGameLoop game 1 (0, 0)
+  where
+    playGameLoop :: Game -> Int -> (Int, Int) -> (Int, Int)
+    playGameLoop prevGame numOfThisBranch (p1, p2) = (n1, n2)
+      where
+        playWithThrows :: (Int, Int) -> (Int, Int)
+        playWithThrows (sumThrows, numBranches)
+          | winner == 0 = playGameLoop nextGame numOfThisGame (0, 0)
+          | winner == 1 = (numOfThisGame, 0)
+          | winner == 2 = (0, numOfThisGame)
+          where
+            numOfThisGame = numBranches * numOfThisBranch
+            nextGame = playGameTurn prevGame sumThrows
+            winner = winningPlayer 21 nextGame
+
+        (n1, n2) = foldr
+          ((\ (a1, a2) (b1, b2) -> (b1 + a1, b2 + a2)) . playWithThrows)
+          (p1, p2)
+          numDiracThrows
+                  
 task1 :: Game -> IO ()
 task1 game = do
   let (die, finishedGame) = playGameDeterministic game
   let result = numRolls die * min ((score.player1) finishedGame) ((score.player2) finishedGame)
   printf "Task 1: score=%d\n" result
 
+task2 :: Game -> IO ()
+task2 game = do
+  let (numPlayer1Wins, numPlayer2Wins) = playGameDirac game
+  let result = max numPlayer1Wins numPlayer2Wins
+  printf "Task 2: result=%d\n" result
+
 main = do
   content <- readFile inputFile
   let game = (initGame.lines) content
   task1 game
+  task2 game
