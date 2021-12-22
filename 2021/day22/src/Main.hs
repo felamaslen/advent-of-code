@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 import Data.List.Split
 import Text.Printf
-import Debug.Trace (traceShow)
 import Data.Maybe (fromMaybe)
 
 inputFile = "./input.txt"
@@ -123,8 +122,12 @@ printRanges = concatMap ((++"\n\n") . unlines . getAllRanges)
 task1 :: [Step] -> Int
 task1 = reduceNumSwitchedOn . truncateSteps (-50) 50
 
+task2 :: [Step] -> Int
+task2 = reduceNumSwitchedOn
+
 main = do
   content <- readFile inputFile
   let steps = (getSteps . lines) content
 
   printf "Task 1: %d\n" (task1 steps)
+  printf "Task 2: %d\n" (task2 steps)
