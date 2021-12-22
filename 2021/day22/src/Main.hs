@@ -104,21 +104,6 @@ reduceNumSwitchedOn steps = loop 0 []
           where Step on cuboid = steps !! i
                 next = (if on then switchOn else switchOff) switchedOn cuboid
 
-getAllRanges :: Cuboid -> [String]
-getAllRanges (Cuboid (x1,x2) (y1,y2) (z1,z2)) = loopX x1
-  where loopX x
-          | x <= x2 = loopY x y1 ++ loopX (x+1)
-          | otherwise = []
-        loopY x y
-          | y <= y2 = loopZ x y z1 ++ loopY x (y+1)
-          | otherwise = []
-        loopZ x y z
-          | z <= z2 = (show x++","++show y++","++show z) : loopZ x y (z+1)
-          | otherwise = []
-
-printRanges :: [Cuboid] -> String
-printRanges = concatMap ((++"\n\n") . unlines . getAllRanges)
-
 task1 :: [Step] -> Int
 task1 = reduceNumSwitchedOn . truncateSteps (-50) 50
 
