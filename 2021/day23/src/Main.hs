@@ -27,28 +27,22 @@ instance Show Amphipod where
   show (Amphipod aId t _ _ _) = show aId++" - "++show t
 
 data Burrow = Burrow { hallway :: [Maybe Amphipod]
-                     , rooms :: [(Maybe Amphipod, Maybe Amphipod)]
+                     , rooms :: [[Maybe Amphipod]]
+                     , roomSize :: Int
                      , cost :: Int }
 
 instance Eq Burrow where
-  (Burrow hA rA _) == (Burrow hB rB _) = hA == hB && rA == rB
+  (Burrow hA rA _ _) == (Burrow hB rB _ _) = hA == hB && rA == rB
 
 instance Show Burrow where
-  show (Burrow hallway rooms cost) = "cost="++show cost++"\n" ++
+  show (Burrow hallway rooms roomSize cost) = "cost="++show cost++"\n" ++
     concatMap (const "#") [0..12] ++ "\n#" ++
     map (\case
          Just amphipod -> (head.amphipodType) amphipod
          Nothing -> '.'
-        ) hallway  ++ "#\n###" ++
-    [maybe '.' (head . amphipodType) ((fst . (!!0)) rooms)] ++ "#" ++
-    [maybe '.' (head . amphipodType) ((fst . (!!1)) rooms)] ++ "#" ++
-    [maybe '.' (head . amphipodType) ((fst . (!!2)) rooms)] ++ "#" ++
-    [maybe '.' (head . amphipodType) ((fst . (!!3)) rooms)] ++ "###\n  #" ++
-    [maybe '.' (head . amphipodType) ((snd . (!!0)) rooms)] ++ "#" ++
-    [maybe '.' (head . amphipodType) ((snd . (!!1)) rooms)] ++ "#" ++
-    [maybe '.' (head . amphipodType) ((snd . (!!2)) rooms)] ++ "#" ++
-    [maybe '.' (head . amphipodType) ((snd . (!!3)) rooms)] ++ "#\n  " ++
-    map (const '#') [0..8] ++ "\n"
+        ) hallway ++ "#\n###" ++
+    concatMap (\ a -> maybe '.' (head . amphipodType) (head a) : "#") rooms ++ "##\n" ++
+    concatMap (\ i -> "  #" ++ concatMap (\ a -> maybe '.' (head . amphipodType) (a !! i) : "#") rooms ++ "\n") [1..roomSize - 1]
 
 type Simulation = [Burrow]
 
@@ -87,73 +81,82 @@ getHallAmphipod aId pos c
   | otherwise = Just (Amphipod aId (getAmphipodType c) (getDestinationRoom c) (Left pos) (getMoveCost c))
 
 readInput :: [String] -> Burrow
-readInput chars = Burrow hallway amphipods 0
-  where [_, hall, l0, l1, _] = chars
+readInput chars = Burrow hallway rooms roomSize 0
+  where hall = chars !! 1
         hallChars = (init . drop 1) hall
         numHall = length hallChars
         hallway = map (\ i -> getHallAmphipod i i (hallChars !! i)) [0..numHall - 1]
-        top = map head (splitOn "#" ((take 7 . drop 3) l0))
-        bottom = map head (splitOn "#" ((take 7 . drop 3) l1))
-        children = zip top bottom
-        amphipods = map (\ i -> bimap (getRoomAmphipod (numHall+i*2) i 0) (getRoomAmphipod (numHall+i*2+1) i 1) ((!!i) children)) [0..length children - 1]
+        children = map (map head . splitOn "#" . take 7 . drop 3) ((init . drop 2) chars)
+        numRooms = (length . head) children
+        roomSize = length children
+        rooms = map (\ i -> map (\ j -> getRoomAmphipod (i * roomSize + j) i j ((children !! j) !! i)) [0..roomSize - 1]) [0..numRooms - 1]
 
 roomIndexToHallwayIndex i = 2 * (i+1)
 hallwayIndexToRoomIndex h = h `div` 2 - 1
 
 getPossibleMovesFromHallway :: Burrow -> [Burrow]
-getPossibleMovesFromHallway (Burrow hallway rooms cost) = fromPosition 0
+getPossibleMovesFromHallway (Burrow hallway rooms roomSize cost) = fromPosition 0
   where
     fromPosition :: Int -> [Burrow]
-    fromPosition i
-      | i < length hallway = next ++ fromPosition (i+1)
+    fromPosition h
+      | h < length hallway = next ++ fromPosition (h+1)
       | otherwise = []
-      where next = case hallway !! i of
+
+      where nextHallway = take h hallway ++ [Nothing] ++ drop (h+1) hallway
+            amphipod = hallway !! h
+            next = case amphipod of
                      Nothing -> []
-                     Just amphipod ->
-                       if freeToRoom
-                          then case destRoom of
-                                 (Nothing, Nothing) ->
-                                   [Burrow nextHallway (take dest rooms ++ [(Nothing, Just amphipod)] ++ drop (dest+1) rooms) (cost + moveCost * (hallwayDiff + 2))]
-                                 (Nothing, Just neighbour) ->
-                                   [Burrow nextHallway (take dest rooms ++ [(Just amphipod, Just neighbour)] ++ drop (dest+1) rooms) (cost + moveCost * (hallwayDiff + 1))
-                                     | destinationRoom neighbour == dest]
-                                 _ -> []
+                     Just _ -> if freeToRoom then loopToRoom 0 else []
 
-                           else []
-                       where (Amphipod _ _ dest _ moveCost) = amphipod
-                             destHallwayIndex = roomIndexToHallwayIndex dest
-                             left = min destHallwayIndex i
-                             right = max destHallwayIndex i
-                             hallwaySteps = if i < destHallwayIndex
-                                               then (take (right-left) . drop (left+1)) hallway
-                                               else (take (right-left) . drop left) hallway
-                             freeToRoom = not (any (\case
-                                                    Nothing -> False
-                                                    Just a -> True) hallwaySteps)
-                             hallwayDiff = abs (roomIndexToHallwayIndex dest - i)
-                             destRoom = rooms !! dest
-                             nextHallway = take i hallway ++ [Nothing] ++ drop (i+1) hallway
+            Just (Amphipod _ _ dest _ moveCost) = amphipod
+            hDest = roomIndexToHallwayIndex dest
+            destRoom = rooms !! dest
+            left = min hDest h
+            right = max hDest h
+            hallwaySteps = if h < hDest
+                              then (take (right-left) . drop (left+1)) hallway
+                              else (take (right-left) . drop left) hallway
+            freeToRoom = not (any (\case
+                                   Nothing -> False
+                                   Just _ -> True) hallwaySteps)
+            loopToRoom j =
+              case destRoom !! j of
+                Just _ -> []
+                Nothing -> if j < length destRoom - 1
+                              then case destRoom !! (j+1) of
+                                     Just _ ->
+                                       [burrowMovedToDestination | (not . any (\case
+                                         Just (Amphipod _ _ neighbourDest _ _) -> neighbourDest /= dest
+                                         Nothing -> False)) (drop (j+1) destRoom)]
+                                     Nothing -> loopToRoom (j+1)
+                              else [burrowMovedToDestination]
+                  where burrowMovedToDestination = Burrow
+                          nextHallway
+                          (take dest rooms ++ [take j destRoom ++ [amphipod] ++ drop (j+1) destRoom] ++ drop (dest+1) rooms)
+                          roomSize
+                          (cost + moveCost * (abs (h - hDest) + (j+1)))
 
-getPossibleMovesFromRooms :: Burrow -> [(Burrow, Int)]
-getPossibleMovesFromRooms burrow = fromRoom 0
+getPossibleMovesFromRooms :: Burrow -> [Burrow]
+getPossibleMovesFromRooms burrow = getMoveOptionsFromRoom 0 0 []
   where
-    Burrow hallway rooms cost = burrow
+    Burrow hallway rooms roomSize cost = burrow
 
-    getMoveOptionsFromRoom :: Int -> Amphipod -> Int -> [(Burrow, Int)]
-    getMoveOptionsFromRoom i amphipod roomPosition =
-      case hallway !! h of
-        Just _ -> []
-        Nothing -> case straightToDestination of
-                     Nothing -> map (\ j -> (
-                         Burrow
-                           (take j hallway ++ [Just amphipod] ++ drop (j+1) hallway)
-                           (take i rooms ++ [nextRoom] ++ drop (i+1) rooms)
-                           (cost + moveCost * (abs (j-h) + fromCost))
-                        ,destinationRoom amphipod
-                       )) hallwayOptions
-                     Just option -> [option]
+    getMoveOptionsFromRoom :: Int -> Int -> [Burrow] -> [Burrow]
+    getMoveOptionsFromRoom i j reduction
+      | i >= length rooms = reduction
+      | j >= roomSize = getMoveOptionsFromRoom (i+1) 0 reduction
+      | otherwise =
+        case amphipod of
+          Nothing -> getMoveOptionsFromRoom i (j+1) reduction
+          Just _ -> case hallway !! h of
+            Just _ -> getMoveOptionsFromRoom (i+1) 0 reduction
+            Nothing ->
+              case straightToDestinationOption of
+                Just option -> [option]
+                Nothing -> getMoveOptionsFromRoom (i+1) 0 (filteredHallwayOptions ++ reduction)
 
-      where (Amphipod _ _ dest _ moveCost) = amphipod
+      where amphipod = (rooms !! i) !! j
+            Just (Amphipod _ _ i' _ moveCost) = amphipod
             h = roomIndexToHallwayIndex i
             reducePossibleLeft j
               | j > 1 = case (hallway !! j, hallway !! (j-1)) of
@@ -177,244 +180,102 @@ getPossibleMovesFromRooms burrow = fromRoom 0
 
             hallwayOptions = reducePossibleLeft (h-1) ++ reducePossibleRight (h+1)
 
-            straightToDestinationOptions =
-              (filter (\case
-                      Nothing -> False
-                      Just _ -> True ) .
-              map ((\case
-                   Nothing -> Nothing
-                   Just o ->
-                     case (hallway !! o, rooms !! room) of
-                     (Just _, _) -> Nothing
-                     (Nothing, (Nothing, Just neighbour)) ->
-                       if destinationRoom neighbour == room
-                         then Just (Burrow hallway movedFrom (cost + moveCost * (abs (o-h) + fromCost + 1)), (-1)::Int)
-                         else Nothing
-                         where movedTo = take room rooms ++ [(Just amphipod, Just neighbour)] ++ drop (room+1) rooms
-                               movedFrom = take i movedTo ++ [nextRoom] ++ drop (i+1) movedTo
-                     (Nothing, (Nothing, Nothing)) ->
-                       Just (Burrow hallway movedFrom (cost + moveCost * (abs (o-h) + fromCost + 2)), (-1)::Int)
-                         where movedTo = take room rooms ++ [(Nothing, Just amphipod)] ++ drop (room+1) rooms
-                               movedFrom = take i movedTo ++ [nextRoom] ++ drop (i+1) movedTo
-                     _ -> Nothing
+            toHallwayOptions = map (\ hStep -> Burrow
+               (take hStep hallway ++ [amphipod] ++ drop (hStep+1) hallway)
+               roomsVacatedI
+               roomSize
+               (cost + moveCost * (abs (hStep - h) + (j+1)))
+             ) hallwayOptions
 
-                    where room = hallwayIndexToRoomIndex o) .
+            filteredHallwayOptions = if i' /= i || any (\case
+                                                        Just (Amphipod _ _ neighbourDest _ _) -> neighbourDest /= i
+                                                        Nothing -> True) (drop (j+1) (rooms !! i))
+                                        then toHallwayOptions
+                                        else []
 
-                  (\ o ->
-                    if o > h && hallwayIndexToRoomIndex (o+1) == dest
-                       then Just (o+1)
-                       else if o < h && hallwayIndexToRoomIndex (o-1) == dest
-                       then Just (o-1)
-                       else Nothing))) hallwayOptions
+            h' = roomIndexToHallwayIndex i'
+            canMoveNextToDestRoom = any (\ o -> (o > h && (o+1) == h') || (o < h && (o-1) == h')) hallwayOptions
 
-            straightToDestination = if null straightToDestinationOptions
-                                       then Nothing
-                                       else head straightToDestinationOptions
+            straightToDestinationOption =
+              if canMoveNextToDestRoom
+                 then toDestinationLoop 0
+                 else Nothing
 
-            nextRoom = if roomPosition == 0
-                          then (Nothing, (snd . (!!i)) rooms)
-                          else (Nothing, Nothing)
-            fromCost = roomPosition + 1
+              where toDestinationLoop j' =
+                      case (rooms !! i') !! j' of
+                        Nothing -> if j' < roomSize - 1
+                                      then case (rooms !! i') !! (j'+1) of
+                                             Just _ -> if any (\case
+                                                               Just (Amphipod _ _ neighbourDest _ _) -> neighbourDest /= i'
+                                                               Nothing -> False) (drop (j'+1) (rooms !! i'))
+                                                          then Nothing
+                                                          else burrowMovedToDestination
+                                             Nothing -> toDestinationLoop (j'+1)
+                                      else burrowMovedToDestination
+                        Just _ -> Nothing
 
-    fromRoom :: Int -> [(Burrow, Int)]
-    fromRoom i
-      | i < length rooms = next ++ fromRoom (i+1)
-      | otherwise = []
-      where next = case rooms !! i of
-                     (Nothing, Nothing) -> []
-                     (Nothing, Just amphipod) -> getMoveOptionsFromRoom i amphipod 1
-                     (Just amphipod, Just neighbour) ->
-                       if destinationRoom amphipod == destinationRoom neighbour && destinationRoom amphipod == i
-                          then []
-                          else getMoveOptionsFromRoom i amphipod 0
+                      where destRoom = map (const Nothing) [0..j'-1] ++ [amphipod] ++ drop (j'+1) (rooms !! i')
+                            burrowMovedToDestination = Just (Burrow
+                              hallway
+                              (take i' roomsVacatedI ++ [destRoom] ++ drop (i'+1) roomsVacatedI)
+                              roomSize
+                              (cost + moveCost * ((j+1) + abs (h'-h) + (j'+1))))
 
--- heuristic :: Burrow -> Int
--- heuristic burrow = costHeuristic
---   where allRooms = rooms burrow
---         costHeuristic = sum (map (\ i ->
---           case allRooms !! i of
---             (Nothing, Nothing) -> 2 * 10 ^ i
---             (Nothing, Just (Amphipod _ _ dest _ _)) -> 10 ^ i * (if dest == i then 1 else 2)
---             (Just (Amphipod _ _ dest _ _), Nothing) -> 10 ^ i * (if dest == i then 1 else 2)
---             (Just (Amphipod _ _ destTop _ _), Just (Amphipod _ _ destBottom _ _)) ->
---               10 ^ i * ((if destTop == i then 0 else 1) + (if destBottom == i then 0 else 1))
---           ) [0..length allRooms - 1])
+            nextRoom = map (const Nothing) [0..j] ++ drop (j+1) (rooms !! i)
+            roomsVacatedI = take i rooms ++ [nextRoom] ++ drop (i+1) rooms
 
--- heuristic :: Burrow -> Int
--- heuristic burrow = 2 * length allRooms - numRoomCellsFilled
---   where allRooms = rooms burrow
---         numRoomCellsFilled = sum (map (\ i ->
---           case allRooms !! i of
---             (Nothing, Nothing) -> 0
---             (Nothing, Just (Amphipod _ _ dest _ _)) -> if dest == i then 1 else 0
---             (Just (Amphipod _ _ dest _ _), Nothing) -> if dest == i then 1 else 0
---             (Just (Amphipod _ _ destTop _ _), Just (Amphipod _ _ destBottom _ _)) ->
---               (if destTop == i then 1 else 0) + (if destBottom == i then 1 else 0)
---           ) [0..length allRooms - 1])
-
-getPossibleMoves :: Int -> Simulation -> [Simulation]
-getPossibleMoves maxCost simulation = map (:simulation) filteredMoves
-  where (s:history)= simulation
+getPossibleMoves :: Simulation -> [Simulation]
+getPossibleMoves simulation = map (:simulation) filteredMoves
+  where (s:history) = simulation
         fromHallway = getPossibleMovesFromHallway s
         fromRooms = getPossibleMovesFromRooms s
-        nextMoves = if null fromHallway then map fst fromRooms else fromHallway
-        -- allPossibleMoves = getPossibleMovesFromHallway s ++
-        --   (map fst . sortBy (\ (_, a) (_, b) -> compare a b)) (getPossibleMovesFromRooms s)
-        -- filteredMoves = (filter (\ a -> cost a < maxCost) . filter (`notElem` history)) allPossibleMoves
+        nextMoves = if null fromHallway then fromRooms else fromHallway
         filteredMoves = filter (`notElem` history) nextMoves
 
 isFinishedBurrow :: Burrow -> Bool
-isFinishedBurrow (Burrow _ rooms _) = not (any (\ i ->
-  case rooms !! i of
-    (Nothing, _) -> True
-    (_, Nothing) -> True
-    (Just (Amphipod _ _ destA _ _), Just (Amphipod _ _ destB _ _)) -> destA /= destB || destA /= i
-  ) [0..length rooms - 1])
+isFinishedBurrow (Burrow _ rooms _ _) = (not . any (\ i ->
+  any (\case
+       Just (Amphipod _ _ dest _ _) -> dest /= i
+       Nothing -> True
+      ) (rooms !! i)
+  )) [0..length rooms - 1]
 
 isFinished :: Simulation -> Bool
 isFinished (s:history) = isFinishedBurrow s
 
 optimiseSimulation :: Simulation -> Maybe (Int, Simulation)
-optimiseSimulation simulation = loop 0 [simulation] Nothing
-  where loop :: Int -> [Simulation] -> Maybe (Int, Simulation) -> Maybe (Int, Simulation)
-        loop depth [] best = best
-        loop depth children best
-          | depth >= 20 = best
-          | (not.null) finished && (cost.head.head) finished < bestCost =
-            traceShow ("found! depth="++show depth++", cost="++show ((cost.head.head) finished)) (Just ((cost.head.head) finished, head finished))
+optimiseSimulation simulation = loop [simulation] Nothing
+  where loop :: [Simulation] -> Maybe (Int, Simulation) -> Maybe (Int, Simulation)
+        loop [] best = best
+        loop children best
+          | (not.null) finished && (cost.head.head) finished < bestCost = Just ((cost.head.head) finished, head finished)
           | (not.null) finished = best
-          | otherwise = loop depth filteredSiblings firstResult
+          | otherwise = loop filteredSiblings firstResult
 
-          -- | isFinished s = traceShow ("found! cost="++show ((cost.head) s)) (loop depth filteredSiblings (Just nextBest))
-          -- | otherwise = loop depth filteredAncestors firstResult
             where (s:rest) = children
                   bestCost = case best of
                                Nothing -> 100000
                                Just (c, _) -> c
 
-                  finished = (sortBy (\ a b -> compare ((cost.head) a) ((cost.head) b)) . filter isFinished) children
+                  finished = filter isFinished children
 
-                  firstResult = loop (depth+1) (getPossibleMoves bestCost s) best
+                  firstResult = loop (getPossibleMoves s) best
 
                   filteredSiblings = case firstResult of
                                Nothing -> rest
                                Just (bc, _) -> filter (\ sim -> (cost.head) sim < bc) rest
 
+task1 :: [String] -> Int
+task1 chars = maybe (error "could not find solution to task 1") fst (optimiseSimulation [burrow])
+  where burrow = readInput chars
 
-                  -- thisCost = cost (head s)
-                  -- nextBest = case best of
-                  --              Nothing -> (thisCost, s)
-                  --              Just (bc, bs) -> if thisCost < bc then (thisCost, s) else (bc, bs)
-                  -- filteredSiblings = filter (\ sim -> (cost . head) sim < fst nextBest) rest
-
-                  -- firstMoves = (getPossibleMoves bestCost s)
-
-                  -- firstResult = traceShow ("getPossibleMoves; depth="++show depth++", bestCost="++show bestCost++", nmoves="++show (length firstMoves)) (loop (depth+1) firstMoves best)
-
-                  -- filteredAncestors = case firstResult of
-                  --                       Nothing -> rest
-                  --                       Just (max, _) -> filter (\ sim -> (cost . head) sim < max) rest
+task2 :: [String] -> Int
+task2 chars = maybe (error "could not find solution to task 2") fst (optimiseSimulation [burrow])
+  where burrow = readInput (take 3 chars ++ ["  #D#C#B#A#\n"] ++ ["  #D#B#A#C#\n"] ++ drop 3 chars)
 
 main = do
   content <- readFile inputFile
-  let burrow = readInput (lines content)
-  print burrow
+  let chars = lines content
 
-  -- let simulation = [burrow]
-  -- let best = Nothing
-  -- let bestCost = case best of
-  --                  Nothing -> 100000
-  --                  Just (c, _) -> c
-  -- let (s:rest) = [simulation]
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- let (s:rest) = moves
-  -- let moves = getPossibleMoves bestCost s
-  -- printf "nmoves=%d\n" (length moves)
-
-  -- printf "finished index=%s, cost=%d\n" (show (findIndex isFinished moves)) ((cost.(!!0).(!!0)) moves)
-  -- print (length moves)
-
-  -- let (s:rest) = moves
-
-  -- let nextSimulation = getPossibleMoves simulation
-  -- print nextSimulation
-
-  let result = optimiseSimulation [burrow]
-  print result
-  -- printf "%s" (concatMap ((++"\n") . show) (reverse stack))
-  
-  -- let bestCost = Nothing
-  -- let bestStack = []
-  -- let stack = []
-  -- let (n:next) = [burrow]
-  -- let nextStack = n:stack
-  -- let nIsFinished = isFinished n
-  -- let validMoves = (filter (`notElem` stack) .
-  --                 (case bestCost of
-  --                    Nothing -> id
-  --                    Just c -> filter (\ b -> cost b < c)
-  --                 ) .
-  --                 getPossibleMoves) n
-
-  -- print validMoves
-
-  -- printf "NEXT OPTIONS=\n"
-  -- print ((getPossibleMoves) burrow)
+  printf "Task 1: cost=%d\n" (task1 chars)
+  printf "Task 2: cost=%d\n" (task2 chars)
