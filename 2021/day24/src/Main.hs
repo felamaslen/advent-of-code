@@ -16,9 +16,6 @@ data ALU = ALU { w :: Int
                , y :: Int
                , z :: Int }
 
-instance Eq ALU where
-  (ALU _ _ _ z1) == (ALU _ _ _ z2) = mod z1 26 == mod z2 26
-
 instance Show ALU where
   show (ALU w x y z) = "w="++show w++",x="++show x++",y="++show y++",z="++show z
 
@@ -72,41 +69,6 @@ runProgramStep alu input instruction = result
         Left (InstructInp set _) -> (set alu input, True)
         Right instruction -> (runInstructionSet alu instruction, False)
 
-runFullProgram :: Program -> [Int] -> ALU
-runFullProgram (Program program) = runLoop initialALU program
-  where
-    initialALU = ALU 0 0 0 0
-    runLoop alu [] _ = alu
-    runLoop alu (instruction:nextInstructions) inputs= runLoop nextALU nextInstructions nextInputs
-      where
-        (nextALU, wasInput) = runProgramStep alu (head inputs) instruction
-        nextInputs = if wasInput then tail inputs else inputs
-
-getFinalZValue :: Program -> Int -> Int
-getFinalZValue program modelNumber = z (runFullProgram program inputs)
-  where inputs = map toIntChar (show modelNumber)
-
-modelNumberIsValid :: Program -> Int -> Bool
-modelNumberIsValid program modelNumber
-  | result == 0 = True
-  | result > 0 = False
-  | result < 0 = error "returned z was < 0; MONAD program invalid!"
-  where result = getFinalZValue program modelNumber
-
-changeModelNumber :: Int -> Int -> Int
-changeModelNumber d n = if '0' `elem` show next then changeModelNumber d next else next
-  where next = n + d
-
-increment = changeModelNumber 1
-decrement = changeModelNumber (-1)
-
-findLargestValidModelNumber :: Program -> Int
-findLargestValidModelNumber program = runLoop 99999936617577 -- 99999999999999
-  where runLoop modelNumber
-          | modelNumberIsValid program modelNumber = modelNumber
-          | modelNumber > 11111111111111 = runLoop nextModelNumber
-          where nextModelNumber = decrement modelNumber
-
 getSetter :: String -> SetVar
 getSetter str = case str of
   "w" -> (\ (ALU _ x y z) v -> ALU v x y z)
@@ -143,30 +105,12 @@ readProgram lines = Program (loop lines)
                   (pieces !! 1)
                   (pieces !! 2)
 
-filterOrderedUnique :: Eq b => [(a, b)] -> [(a, b)]
-filterOrderedUnique items = loop items []
-  where loop :: Eq b => [(a,b)] -> [(a,b)] -> [(a,b)]
-        loop remaining reduction = if null filteredRemaining then reduction else next
-          where filteredRemaining = filter (\ (_,b0) -> (not . any (\ (_,b1) -> b0 == b1)) reduction) remaining
-                nextReduction = head filteredRemaining:reduction
-                next = loop (tail filteredRemaining) nextReduction
-
 runProgramSlice :: Program -> Int -> ALU -> ALU
 runProgramSlice (Program []) _ alu = alu
 runProgramSlice (Program (i:instructions)) input alu = runProgramSlice (Program instructions) input (fst (runProgramStep alu input i))
 
 parseNumber :: [Int] -> Int
 parseNumber = toInt . concatMap show . reverse
-
-splitProgramToNextInput :: [Instruction] -> ([Instruction], [Instruction])
-splitProgramToNextInput program =
-  case nextInputIndex of
-    Just i' -> (i:take i' instructions, drop i' instructions)
-    Nothing -> (i:instructions, [])
-  where (i:instructions) = program
-        nextInputIndex = findIndex (\case
-                                    Left _ -> True
-                                    Right _ -> False) instructions
 
 splitProgram :: Program -> [Program]
 splitProgram (Program program) = map Program (loop program)
