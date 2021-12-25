@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
 import Data.List (findIndex, sortBy)
-import Debug.Trace
 import Text.Printf
 import Data.Maybe (fromMaybe)
 import Data.Bifunctor (Bifunctor(second))
@@ -104,22 +103,9 @@ decrement = changeModelNumber (-1)
 findLargestValidModelNumber :: Program -> Int
 findLargestValidModelNumber program = runLoop 99999936617577 -- 99999999999999
   where runLoop modelNumber
-          | modelNumberIsValid program modelNumber = -- traceShow ("is valid; n="++show modelNumber)
-              modelNumber
+          | modelNumberIsValid program modelNumber = modelNumber
           | modelNumber > 11111111111111 = runLoop nextModelNumber
           where nextModelNumber = decrement modelNumber
--- 
--- findAllValidModelNumbers :: Program -> [Int]
--- findAllValidModelNumbers program = runLoop 11111111111111
---   where getNextModelNumber modelNumber
---           | '0' `elem` show next = getNextModelNumber next
---           | otherwise = next
---           where next = modelNumber + 1
---         runLoop modelNumber
---           | modelNumberIsValid program modelNumber = traceShow ("is valid; n="++show modelNumber)
---             (modelNumber:runLoop nextModelNumber)
---           | modelNumber < 99999999999999 = runLoop nextModelNumber
---           where nextModelNumber = traceShow ("next="++show modelNumber) (getNextModelNumber modelNumber)
 
 getSetter :: String -> SetVar
 getSetter str = case str of
@@ -199,271 +185,34 @@ isDivZ (Program program) = any (\case
                                     Right _ -> False
                                 Left _ -> False) program
 
-findOptimalInput :: [Program] -> Maybe [Int]
-findOptimalInput split = loop 0 (ALU 0 0 0 0) []
+findOptimalInput :: ([(Int, ALU)] -> [(Int, ALU)]) -> [Program] -> Maybe [Int]
+findOptimalInput reverseOrId split = loop 0 (ALU 0 0 0 0) []
   where loop p alu ns
           | p >= length split = Nothing
           | p == length split - 1 && (not . null) finishedOption = Just ((fst . head) finishedOption : ns)
           | otherwise = loopNext nextOptions
           where prog = split !! p
                 Program prog' = prog
-                options = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-                finishedOption' = filter (\ (_, alu') -> z alu' == 0) options
-                finishedOption = traceShow ("p="++show p++", finished="++show (map fst finishedOption'))
-                  finishedOption'
-                -- decreasedIndex = findIndex (\ (_, alu') -> z alu' < z alu) options
-                -- nextOptions' = case decreasedIndex of
-                --                 Nothing -> reverse options
-                --                 Just i -> [options !! i]
-                nextOptions' = if isDivZ prog
-                                 then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options
-                                 else options
-                nextOptions = traceShow ("p="++show p++", opts="++show (map fst nextOptions')++", ns="++show ns)
-                  nextOptions'
+                options = (reverseOrId . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
+                finishedOption = filter (\ (_, alu') -> z alu' == 0) options
+                nextOptions = if isDivZ prog
+                                then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options
+                                else options
                 loopNext [] = Nothing
                 loopNext ((o, alu'):os) =
                   case loop (p+1) alu' (o:ns) of
                     Nothing -> loopNext os
                     Just result -> Just result
 
+findLargestInput = findOptimalInput reverse
+findSmallestInput = findOptimalInput id
+
+task1 = maybe 0 parseNumber . findLargestInput
+task2 = maybe 0 parseNumber . findSmallestInput
+
 main = do
   content <- readFile inputFile
-  let program = readProgram (lines content)
-  let split = splitProgram program
+  let program = (splitProgram . readProgram) (lines content)
 
-  -- let optimalInput = findOptimalInput split
-  -- print optimalInput
-  let optimalInput = [9,9,3,9,2,8,7,9,9,6,9,9,2,1]
-  let result = parseNumber optimalInput
-  print result
-  print (getFinalZValue program result)
-
-  -- let p = 0
-  -- let alu = ALU 0 0 0 0
-  -- let ns = [] :: [Int]
-  -- let zs = [z alu]
-
-  -- let prog = split !! p
-
-  -- let options = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map fst options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "a=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map fst options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "b=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map fst options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "c=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map fst options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "d=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "e=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "f=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "g=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "h=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "i=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "j=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "k=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
-
-  -- let p' = p+1
-  -- let p = p'
-  -- let i = 0
-  -- let alu = (snd . (!!i)) options
-  -- let ns' = ns ++ [(fst . (!!i)) options]
-  -- let zs' = zs ++ [z alu]
-  -- let ns = ns'
-  -- let zs = zs'
-  -- printf "l=%d: ns=%s, zs=%s\n---\n" (last ns) (concatMap show ns) (concatMap ((++",") . show) zs)
-
-  -- let prog = split !! p
-
-  -- let options' = (reverse . map (\ i -> (i, runProgramSlice prog i alu))) [1..9]
-  -- let options = if isDivZ prog
-  --                     then filter (\ (_, alu') -> z alu' <= z alu `div` 26) options'
-  --                     else options'
-  -- printf "p=%d, isDiv=%s, " p ((show . isDivZ) prog)
-  -- print (map (z . snd) options)
+  printf "Task 1: largest valid model = %d\n" (task1 program)
+  printf "Task 2: largest valid model = %d\n" (task2 program)
